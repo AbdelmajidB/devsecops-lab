@@ -1,18 +1,15 @@
 from flask import Flask, request
 import sqlite3
 import subprocess
+import hashlib
+import os
 
 app = Flask(__name__)
 
-# -------------------------------------------------------------------------
-# Vulnérabilité 1 : Secret codé en dur (CodeQL le détecte)
-# -------------------------------------------------------------------------
-SECRET_KEY = "12345"
+
+SECRET_KEY = "dev-secret-key-12345"   # Hardcoded secret
 
 
-# -------------------------------------------------------------------------
-# Vulnérabilité 2 : SQL Injection
-# -------------------------------------------------------------------------
 @app.route("/login", methods=["POST"])
 def login():
     username = request.json.get("username")
@@ -21,7 +18,6 @@ def login():
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
 
-    # Vulnérabilité volontaire : SQL Injection via f-string
     query = f"SELECT * FROM users WHERE username='{username}' AND password='{password}'"
     cursor.execute(query)
 
@@ -32,14 +28,11 @@ def login():
     return {"status": "error", "message": "Invalid credentials"}
 
 
-# -------------------------------------------------------------------------
-# Vulnérabilité 3 : Command Injection (CodeQL + Bandit la détectent)
-# -------------------------------------------------------------------------
 @app.route("/ping", methods=["POST"])
 def ping():
     host = request.json.get("host", "")
 
-    # Vulnérabilité : shell=True + input utilisateur → CRITIQUE
+    # Command Injection : shell=True
     cmd = f"ping -c 1 {host}"
     output = subprocess.check_output(cmd, shell=True)
 
@@ -47,20 +40,58 @@ def ping():
 
 
 # -------------------------------------------------------------------------
-# Vulnérabilité 4 : Endpoint debug exposé
+@app.route("/compute", methods=["POST"])
+def compute():
+    expression = request.json.get("expression", "1+1")
+
+    # Vulnérabilité majeure : exécution de code utilisateur
+    result = eval(expression)   # CRITIQUE
+
+    return {"result": result}
+
+
+# -------------------------------------------------------------------------
+# Vulnérabilité 5 : Hash MD5 (Bandit B303 Weak Cryptography)
+# -------------------------------------------------------------------------
+@app.route("/hash", methods=["POST"])
+def hash_password():
+    pwd = request.json.get("password", "admin")
+
+    # MD5 = weak cryptography
+    hashed = hashlib.md5(pwd.encode()).hexdigest()
+
+    return {"md5": hashed}
+
+
+# -------------------------------------------------------------------------
+# Vulnérabilité 6 : Ouverture de fichier sans contrôle (Bandit B322/B325)
+# -------------------------------------------------------------------------
+@app.route("/readfile", methods=["POST"])
+def readfile():
+    filename = request.json.get("filename", "test.txt")
+
+    # Vulnérabilité : path traversal possible (“../../etc/passwd”)
+    with open(filename, "r") as f:
+        content = f.read()
+
+    return {"content": content}
+
+
+# -------------------------------------------------------------------------
+# Vulnérabilité 7 : Exposition d'informations sensibles
 # -------------------------------------------------------------------------
 @app.route("/debug", methods=["GET"])
 def debug():
-    # Endpoint qui expose des clés → Mauvaise pratique
+    # Renvoie des détails sensibles -> mauvaise pratique
     return {
         "debug": True,
         "secret_key": SECRET_KEY,
-        "message": "Debug mode active"
+        "environment": dict(os.environ)
     }
 
 
 # -------------------------------------------------------------------------
-# Endpoint simple : non vulnérable (pour test normal)
+# Endpoint safe pour test
 # -------------------------------------------------------------------------
 @app.route("/hello", methods=["GET"])
 def hello():
@@ -68,7 +99,7 @@ def hello():
 
 
 # -------------------------------------------------------------------------
-# Lancement application
+# App
 # -------------------------------------------------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
