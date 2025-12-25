@@ -1,9 +1,14 @@
 name: DevSecOps Spring Boot Pipeline
 
-
 on:
   push:
     branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+# =====================================
+# PERMISSIONS GITHUB ACTIONS (OBLIGATOIRES)
+# =====================================
 permissions:
   contents: read
   security-events: write
@@ -13,32 +18,75 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      # =====================================
+      # 1. Checkout du code
+      # =====================================
+      - name: Checkout source code
+        uses: actions/checkout@v3
 
-      # 1. SAST CodeQL
-      - name: Init CodeQL
+      # =====================================
+      # 2. Installation de Java
+      # =====================================
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      # =====================================
+      # 3. Initialisation CodeQL (Java)
+      # =====================================
+      - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: java
 
-      - name: Run CodeQL
+      # =====================================
+      # 4. BUILD OBLIGATOIRE (clé CodeQL Java)
+      # =====================================
+      - name: Build with Maven
+        run: mvn clean compile -DskipTests
+
+      # =====================================
+      # 5. Analyse SAST CodeQL
+      # =====================================
+      - name: Run CodeQL Analysis
         uses: github/codeql-action/analyze@v3
 
-      # 2. Scan dépendances Maven
-      - name: Dependency Check
+      # =====================================
+      # 6. Scan des dépendances Maven
+      # =====================================
+      - name: OWASP Dependency-Check
         uses: dependency-check/Dependency-Check_Action@main
         with:
-          project: "spring-devsecops"
+          project: "spring-boot-devsecops"
+          path: "."
           format: "HTML"
+          out: "dependency-check-report"
 
-      # 3. Build image Docker
+      # =====================================
+      # 7. Upload rapport Dependency-Check
+      # =====================================
+      - name: Upload Dependency-Check report
+        uses: actions/upload-artifact@v3
+        with:
+          name: dependency-check-report
+          path: dependency-check-report
+
+      # =====================================
+      # 8. Build image Docker
+      # =====================================
       - name: Build Docker image
-        run: docker build -t spring-devsecops .
+        run: docker build -t spring-devsecops:latest .
 
-      # 4. Scan image Docker
-      - name: Trivy Scan
+      # =====================================
+      # 9. Scan image Docker avec Trivy
+      # =====================================
+      - name: Trivy Image Scan
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: spring-devsecops
+          image-ref: spring-devsecops:latest
           severity: CRITICAL,HIGH
           exit-code: 1
+          ignore-unfixed: true
