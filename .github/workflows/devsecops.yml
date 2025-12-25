@@ -1,9 +1,13 @@
 name: DevSecOps Spring Boot Pipeline
 
+
 on:
   push:
     branches: [ "main" ]
-
+permissions:
+  contents: read
+  security-events: write
+  actions: read
 jobs:
   devsecops:
     runs-on: ubuntu-latest
