@@ -23,10 +23,12 @@ def login():
         return {"status": "success", "user": username}
     return {"status": "error", "message": "Invalid credentials"}
 @app.route("/ping", methods=["POST"])
-def ping():
-    host = request.json.get("host", "")
-    cmd = f"ping -c 1 {host}"
-    output = subprocess.check_output(cmd, shell=True)
+def ping(host: str) -> str:
+    result = subprocess.check_output(
+        ["ping", "-c", "1", host],
+        text=True
+    )
+    return result
 
     return {"output": output.decode()}
 @app.route("/compute", methods=["POST"])
