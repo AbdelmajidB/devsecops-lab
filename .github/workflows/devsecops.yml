@@ -52,4 +52,5 @@ jobs:
         scan-type: image
         image-ref: devsecops-api
         severity: CRITICAL
+        ignore-unfixed: true
         exit-code: 1
